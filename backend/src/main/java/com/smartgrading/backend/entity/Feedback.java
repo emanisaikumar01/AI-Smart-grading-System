@@ -1,0 +1,3 @@
+package com.smartgrading.backend.entity;
+import jakarta.persistence.*;
+@Entity public class Feedback extends BaseEntity { @Lob private String content; }
