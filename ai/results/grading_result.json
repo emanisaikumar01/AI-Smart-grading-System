@@ -1,0 +1,29 @@
+{
+    "questions": [
+        {
+            "question_number": 1,
+            "question": "What is photosynthesis?",
+            "student_answer": "Photosynthesis is one process in which green plants make their good. They uses sunlight! water and carbon dioxide to produce food.",
+            "correct_answer": "Photosynthesis is the process by which green plants make their own food. Plants use sunlight, water and carbon dioxide to prepare their food.",
+            "similarity_score": 0.92,
+            "keywords_found": 5,
+            "total_keywords": 5,
+            "marks": 9.45,
+            "total_marks": 10
+        },
+        {
+            "question_number": 2,
+            "question": "What do plants need for photosynthesis?",
+            "student_answer": "Plants needs sunlight, water and carbon I dionide for photosynthesis.",
+            "correct_answer": "Plants need sunlight, water and carbon dioxide for photosynthesis.",
+            "similarity_score": 0.92,
+            "keywords_found": 5,
+            "total_keywords": 5,
+            "marks": 9.44,
+            "total_marks": 10
+        }
+    ],
+    "total_marks_obtained": 18.89,
+    "total_marks": 20,
+    "percentage": 94.45
+}
