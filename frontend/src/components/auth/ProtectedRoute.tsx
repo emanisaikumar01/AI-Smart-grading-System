@@ -1,7 +1,10 @@
 import { Navigate, useLocation } from "react-router-dom";
 import { useAuth } from "../../context/AuthContext";
+import type { Role } from "../../lib/api";
 
-export function ProtectedRoute({ children, allowedRoles }: { children: React.ReactNode; allowedRoles?: string[] }) {
+const homeForRole = (role?: Role) => role === "PROFESSOR" ? "/professor" : "/student";
+
+export function ProtectedRoute({ children, allowedRoles }: { children: React.ReactNode; allowedRoles?: Role[] }) {
   const { isAuthenticated, isLoading, user } = useAuth();
   const location = useLocation();
 
@@ -20,7 +23,7 @@ export function ProtectedRoute({ children, allowedRoles }: { children: React.Rea
   if (allowedRoles && allowedRoles.length > 0) {
     const role = user?.role;
     if (!role || !allowedRoles.includes(role)) {
-      return <Navigate to="/" replace />;
+      return <Navigate to={homeForRole(user?.role as Role | undefined)} replace />;
     }
   }
 
@@ -28,7 +31,7 @@ export function ProtectedRoute({ children, allowedRoles }: { children: React.Rea
 }
 
 export function PublicRoute({ children }: { children: React.ReactNode }) {
-  const { isAuthenticated, isLoading } = useAuth();
+  const { isAuthenticated, isLoading, user } = useAuth();
 
   if (isLoading) {
     return (
@@ -39,7 +42,7 @@ export function PublicRoute({ children }: { children: React.ReactNode }) {
   }
 
   if (isAuthenticated) {
-    return <Navigate to="/" replace />;
+    return <Navigate to={homeForRole(user?.role)} replace />;
   }
 
   return <>{children}</>;

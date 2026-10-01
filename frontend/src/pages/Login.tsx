@@ -1,37 +1,45 @@
-import { Link, useNavigate, useLocation } from "react-router-dom";
-import { useState } from "react";
+import { Link, useNavigate } from "react-router-dom";
+import { useEffect, useState } from "react";
 import { BrainCircuit, Code2, Globe, Loader2, Mail, Users } from "lucide-react";
 import { Button } from "../components/ui/Button";
 import { Input } from "../components/ui/Input";
 import { Label } from "../components/ui/Label";
 import { useAuth } from "@/context/AuthContext";
+import { api, ApiError, type Role } from "../lib/api";
 
 interface LoginProps {
   role?: "Student" | "Professor" | "Teacher";
 }
 
-export function Login({ role = "Teacher" }: LoginProps) {
-  const { login, isLoading: authLoading } = useAuth();
+export function Login({ role = "Student" }: LoginProps) {
+  const { login, register, isLoading: authLoading } = useAuth();
   const navigate = useNavigate();
-  const location = useLocation();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [name, setName] = useState("");
   const [error, setError] = useState("");
   const [isLoading, setIsLoading] = useState(false);
+  const [isRegistering, setIsRegistering] = useState(false);
+  const [backendConnected, setBackendConnected] = useState<boolean | null>(null);
 
-  const defaultPath = role === "Student" ? "/student" : role === "Professor" ? "/professor" : "/";
-  const from = (location.state as { from?: Location })?.from?.pathname || defaultPath;
+  useEffect(() => {
+    let active = true;
+    api.health().then(() => { if (active) setBackendConnected(true); }).catch(() => { if (active) setBackendConnected(false); });
+    return () => { active = false; };
+  }, []);
+
+  const selectedRole: Role = role === "Professor" ? "PROFESSOR" : "STUDENT";
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError("");
     setIsLoading(true);
     try {
-      await login(email, password, role, name);
-      navigate(from, { replace: true });
-    } catch {
-      setError("Invalid credentials. Please try again.");
+      if (isRegistering) await register(name.trim(), email.trim(), password, selectedRole);
+      else await login(email.trim(), password);
+      navigate(selectedRole === "PROFESSOR" ? "/professor" : "/student", { replace: true });
+    } catch (cause) {
+      setError(cause instanceof ApiError ? (cause.status === 401 ? "Invalid email or password." : cause.message) : "Unable to sign in. Please try again.");
     } finally {
       setIsLoading(false);
     }
@@ -90,24 +98,26 @@ export function Login({ role = "Teacher" }: LoginProps) {
             <div className="mx-auto mb-3 flex h-11 w-11 items-center justify-center rounded-full border border-primary text-primary shadow-[0_0_12px_rgba(0,238,255,0.7)]">
               <BrainCircuit className="h-5 w-5" />
             </div>
-            <h2 className="text-2xl font-bold">{role} Login</h2>
-            <p className="mt-1 text-xs text-slate-300">Enter your credentials to continue.</p>
+            <h2 className="text-2xl font-bold">{isRegistering ? `${role} Registration` : `${role} Login`}</h2>
+            <p className="mt-1 text-xs text-slate-300">{isRegistering ? "Create your account to continue." : "Enter your credentials to continue."}</p>
+            {backendConnected !== null && <p role="status" className="mt-2 text-[11px] text-slate-400">{backendConnected ? "Backend connected" : "Backend unavailable"}</p>}
           </div>
           
           <form onSubmit={handleSubmit} className="space-y-4">
             <div className="space-y-3">
               <div className="space-y-1">
-                <Label htmlFor="name" className="text-[11px]">Full name</Label>
-                <Input
+                {isRegistering && <Label htmlFor="name" className="text-[11px]">Full name</Label>}
+                {isRegistering && <Input
                   id="name"
                   placeholder="First Last"
                   type="text"
-                  required
+                  required={isRegistering}
                   className="h-8 border-0 bg-white px-3 text-xs text-slate-800 placeholder:text-slate-400"
                   value={name}
                   onChange={(e) => setName(e.target.value)}
                   disabled={isLoading || authLoading}
                 />
+                }
               </div>
               <div className="space-y-1">
                 <Label htmlFor="email" className="text-[11px]">Email</Label>
@@ -125,7 +135,7 @@ export function Login({ role = "Teacher" }: LoginProps) {
               <div className="space-y-1">
                 <div className="flex items-center justify-between">
                   <Label htmlFor="password" className="text-[11px]">Password</Label>
-                  <a href="#" className="text-[10px] font-medium text-primary hover:underline">Forgot password?</a>
+                  {!isRegistering && <span className="text-[10px] text-slate-400">Forgot password?</span>}
                 </div>
                 <Input 
                   id="password" 
@@ -153,35 +163,32 @@ export function Login({ role = "Teacher" }: LoginProps) {
               {isLoading || authLoading ? (
                 <span className="flex items-center justify-center gap-2">
                   <Loader2 className="h-4 w-4 animate-spin" />
-                  Signing in...
+                  {isRegistering ? "Creating account..." : "Signing in..."}
                 </span>
               ) : (
-                `Sign In as ${role}`
+                isRegistering ? `Create ${role} Account` : `Sign In as ${role}`
               )}
             </Button>
           
-            <div className="relative my-4">
+            {!isRegistering && <div className="relative my-4">
               <div className="absolute inset-0 flex items-center">
                 <div className="w-full border-t border-primary/20"></div>
               </div>
               <div className="relative flex justify-center text-sm">
                 <span className="bg-[#1f2937] px-2 text-xs text-slate-300">Or continue with</span>
               </div>
-            </div>
+            </div>}
             
-            <Button variant="outline" className="h-9 w-full border-primary/50 text-sm font-medium">
+            {!isRegistering && <Button type="button" variant="outline" className="h-9 w-full border-primary/50 text-sm font-medium">
               <Globe className="mr-2 h-4 w-4" />
               Google
-            </Button>
+            </Button>}
             
             <p className="mt-5 text-center text-xs text-slate-300">
-              {role === "Student" ? "Are you a professor?" : "Are you a student?"}{" "}
-              <Link
-                to={role === "Student" ? "/professor-login" : "/student-login"}
-                className="font-semibold text-primary hover:underline"
-              >
-                Switch login
-              </Link>
+              {isRegistering ? "Already registered?" : "Need an account?"}{" "}
+              <button type="button" className="font-semibold text-primary hover:underline" onClick={() => { setError(""); setIsRegistering(!isRegistering); }}>
+                {isRegistering ? "Sign in" : "Register"}
+              </button>
             </p>
           </form>
         </section>

@@ -1,0 +1,3 @@
+package com.smartgrading.backend.service;
+import com.smartgrading.backend.dto.*; import com.smartgrading.backend.entity.SubmissionStatus; import java.util.List;
+public interface SubmissionService { SubmissionResponse create(Integer assignmentId,SubmissionRequest r); SubmissionResponse get(Integer id); List<SubmissionResponse> byAssignment(Integer id); List<SubmissionResponse> byStudent(Integer id); List<StudentAnswerResponse> answers(Integer submissionId); StudentAnswerResponse answer(Integer submissionId,StudentAnswerRequest r); StudentAnswerResponse updateAnswer(Integer answerId,AnswerUpdateRequest r); SubmissionResponse transition(Integer submissionId,SubmissionStatus target); }

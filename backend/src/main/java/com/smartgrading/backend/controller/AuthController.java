@@ -1,0 +1,3 @@
+package com.smartgrading.backend.controller;
+import com.smartgrading.backend.dto.*; import com.smartgrading.backend.service.UserService; import jakarta.validation.Valid; import org.springframework.web.bind.annotation.*;
+@RestController @RequestMapping("/api/v1/auth") public class AuthController { private final UserService users; public AuthController(UserService users){this.users=users;} @PostMapping("/register") public AuthResponse register(@Valid @RequestBody RegisterRequest r){return users.register(r);} @PostMapping("/login") public AuthResponse login(@Valid @RequestBody LoginRequest r){return users.login(r);} }

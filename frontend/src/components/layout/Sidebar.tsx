@@ -27,16 +27,16 @@ interface SidebarProps {
 
 const navItems = [
   { name: "Dashboard", href: "/", icon: LayoutDashboard },
-  { name: "Student", href: "/student", icon: GraduationCap },
-  { name: "Professor", href: "/professor", icon: Users },
-  { name: "Grade Assignment", href: "/grade", icon: FileEdit },
-  { name: "Upload Answer Sheets", href: "/upload", icon: Upload },
-  { name: "Assignments", href: "/assignments", icon: BookOpen },
-  { name: "Students", href: "/students", icon: Users },
-  { name: "Results", href: "/results", icon: Award },
-  { name: "Analytics", href: "/analytics", icon: BarChart3 },
-  { name: "Reports", href: "/reports", icon: FileText },
-  { name: "Settings", href: "/settings", icon: Settings },
+  { name: "Student", href: "/student", icon: GraduationCap, roles: ["STUDENT"] },
+  { name: "Professor", href: "/professor", icon: Users, roles: ["PROFESSOR"] },
+  { name: "Grade Assignment", href: "/grade", icon: FileEdit, roles: ["PROFESSOR"] },
+  { name: "Upload Answer Sheets", href: "/upload", icon: Upload, roles: ["PROFESSOR"] },
+  { name: "Assignments", href: "/assignments", icon: BookOpen, roles: ["STUDENT", "PROFESSOR"] },
+  { name: "Students", href: "/students", icon: Users, roles: ["PROFESSOR"] },
+  { name: "Results", href: "/results", icon: Award, roles: ["STUDENT", "PROFESSOR"] },
+  { name: "Analytics", href: "/analytics", icon: BarChart3, roles: ["PROFESSOR"] },
+  { name: "Reports", href: "/reports", icon: FileText, roles: ["PROFESSOR"] },
+  { name: "Settings", href: "/settings", icon: Settings, roles: ["STUDENT", "PROFESSOR"] },
 ];
 
 const bottomNavItems = [
@@ -72,7 +72,7 @@ export function Sidebar({ collapsed, setCollapsed, mobileOpen, setMobileOpen }: 
 
       <div className="flex flex-1 flex-col overflow-y-auto px-3 py-4">
         <nav className="flex-1 space-y-1">
-          {navItems.map((item) => {
+          {navItems.filter((item) => item.roles?.includes(user?.role ?? "STUDENT")).map((item) => {
             const isActive = location.pathname === item.href;
             return (
               <Link
@@ -132,7 +132,7 @@ export function Sidebar({ collapsed, setCollapsed, mobileOpen, setMobileOpen }: 
               <span aria-hidden className="text-sm">{user.name ? user.name.charAt(0) : "U"}</span>
             </div>
             <div className="flex flex-col">
-              <span className="sr-only">{user.name}</span>
+              <span className="max-w-32 truncate text-xs font-medium text-white">{user.name}</span>
               <span className="text-xs text-muted-foreground mt-1">{user.role}</span>
             </div>
           </div>
