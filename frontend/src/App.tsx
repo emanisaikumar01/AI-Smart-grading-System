@@ -1,8 +1,9 @@
-import { BrowserRouter as Router, Routes, Route } from "react-router-dom";
+import { BrowserRouter as Router, Routes, Route, Navigate } from "react-router-dom";
+import { useEffect, useState } from "react";
+import { api, ApiError, type ClassRecord, type User } from "./lib/api";
 import { AuthProvider, useAuth } from "./context/AuthContext";
 import { ProtectedRoute, PublicRoute } from "./components/auth/ProtectedRoute";
 import { AppLayout } from "./components/layout/AppLayout";
-import { Dashboard } from "./pages/Dashboard";
 import { GradeAssignment } from "./pages/GradeAssignment";
 import { Results } from "./pages/Results";
 import { Analytics } from "./pages/Analytics";
@@ -14,8 +15,6 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "./com
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "./components/ui/Table";
 import { Button } from "./components/ui/Button";
 import { Input } from "./components/ui/Input";
-import { Label } from "./components/ui/Label";
-import { useState } from "react";
 
 function ReportsView() {
   const recentReports = [
@@ -86,16 +85,7 @@ function ReportsView() {
 }
 
 function SettingsView() {
-  const { user, updateProfile } = useAuth();
-  const [autoReports, setAutoReports] = useState(true);
-  const [editing, setEditing] = useState(false);
-  const [name, setName] = useState(user?.name ?? "");
-  const [email, setEmail] = useState(user?.email ?? "");
-
-  const saveProfile = () => {
-    updateProfile({ name: name.trim(), email: email.trim() });
-    setEditing(false);
-  };
+  const { user } = useAuth();
 
   return (
     <div className="p-8 space-y-6">
@@ -109,38 +99,12 @@ function SettingsView() {
                 <CardTitle>Account</CardTitle>
                 <CardDescription>Profile information</CardDescription>
               </div>
-              <div>
-                {!editing ? (
-                  <Button variant="outline" onClick={() => setEditing(true)}>Edit Profile</Button>
-                ) : (
-                  <div className="flex gap-2">
-                    <Button variant="ghost" onClick={() => { setEditing(false); setName(user?.name ?? ""); setEmail(user?.email ?? ""); }}>Cancel</Button>
-                    <Button onClick={saveProfile}>Save</Button>
-                  </div>
-                )}
-              </div>
             </div>
           </CardHeader>
           <CardContent className="space-y-4">
-            {!editing ? (
-              <>
-                <div className="text-sm">Name: <span className="font-medium">{user?.name ?? "-"}</span></div>
-                <div className="text-sm">Email: <span className="font-medium">{user?.email ?? "-"}</span></div>
-                <div className="text-sm">Role: <span className="font-medium">{user?.role ?? "-"}</span></div>
-              </>
-            ) : (
-              <div className="space-y-3">
-                <div>
-                  <Label>Name</Label>
-                  <Input value={name} onChange={(e) => setName(e.target.value)} />
-                </div>
-                <div>
-                  <Label>Email</Label>
-                  <Input value={email} onChange={(e) => setEmail(e.target.value)} />
-                </div>
-                <div className="text-xs text-muted-foreground">Role cannot be changed here.</div>
-              </div>
-            )}
+            <div className="text-sm">Name: <span className="font-medium">{user?.name ?? "-"}</span></div>
+            <div className="text-sm">Email: <span className="font-medium">{user?.email ?? "-"}</span></div>
+            <div className="text-sm">Role: <span className="font-medium">{user?.role ?? "-"}</span></div>
           </CardContent>
         </Card>
 
@@ -156,9 +120,7 @@ function SettingsView() {
                 <div className="text-xs text-muted-foreground">The system will create a summary report every week.</div>
               </div>
               <div>
-                <Button variant={autoReports ? "default" : "outline"} onClick={() => setAutoReports(!autoReports)}>
-                  {autoReports ? "Enabled" : "Disabled"}
-                </Button>
+              <span className="text-sm text-muted-foreground">Preferences are not available yet.</span>
               </div>
             </div>
 
@@ -173,6 +135,21 @@ function SettingsView() {
   );
 }
 
+function StudentsView() {
+  const [classes, setClasses] = useState<ClassRecord[]>([]);
+  const [classId, setClassId] = useState("");
+  const [students, setStudents] = useState<User[]>([]);
+  const [studentId, setStudentId] = useState("");
+  const [error, setError] = useState("");
+  const [notice, setNotice] = useState("");
+  const refreshStudents = async (id: number) => { try { setStudents(await api.classes.students(id)); setError(""); } catch (cause) { setError(cause instanceof ApiError ? cause.message : "Could not load students."); } };
+  useEffect(() => { api.classes.list().then((items) => { setClasses(items); if (items[0]) setClassId(String(items[0].id)); }).catch((cause) => setError(cause instanceof ApiError ? cause.message : "Could not load classes.")); }, []);
+  useEffect(() => { if (classId) void refreshStudents(Number(classId)); }, [classId]);
+  const addStudent = async () => { try { await api.classes.addStudent(Number(classId), Number(studentId)); setStudentId(""); setNotice("Student added to class."); await refreshStudents(Number(classId)); } catch (cause) { setError(cause instanceof ApiError ? cause.message : "Could not add student."); } };
+  const removeStudent = async (id: number) => { try { await api.classes.removeStudent(Number(classId), id); setNotice("Student removed from class."); await refreshStudents(Number(classId)); } catch (cause) { setError(cause instanceof ApiError ? cause.message : "Could not remove student."); } };
+  return <div className="space-y-6 p-8"><h1 className="text-2xl font-bold">Class Students</h1><Card><CardHeader><CardTitle>Manage Class Membership</CardTitle><CardDescription>Students must be enrolled before submitting class assignments.</CardDescription></CardHeader><CardContent className="space-y-4"><select aria-label="Class" className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm" value={classId} onChange={(e) => setClassId(e.target.value)}><option value="">Select a class</option>{classes.map((item) => <option key={item.id} value={item.id}>{item.name}{item.section ? ` · ${item.section}` : ""}</option>)}</select><div className="flex gap-2"><Input aria-label="Student ID" type="number" min="1" placeholder="Student user ID" value={studentId} onChange={(e) => setStudentId(e.target.value)} /><Button disabled={!classId || !studentId} onClick={() => void addStudent()}>Add Student</Button></div>{error && <p role="alert" className="text-sm text-destructive">{error}</p>}{notice && <p role="status" className="text-sm text-emerald-600">{notice}</p>}<div className="space-y-2">{students.map((student) => <div key={student.id} className="flex items-center justify-between rounded-lg border p-3"><div><p className="font-medium">{student.name}</p><p className="text-sm text-muted-foreground">{student.email} · ID {student.id}</p></div><Button variant="outline" size="sm" onClick={() => void removeStudent(student.id)}>Remove</Button></div>)}{classId && students.length === 0 && <p className="text-sm text-muted-foreground">No students enrolled in this class.</p>}</div></CardContent></Card></div>;
+}
+
 function App() {
   return (
     <AuthProvider>
@@ -180,22 +157,22 @@ function App() {
         <Routes>
           <Route path="/landing" element={<PublicRoute><Landing /></PublicRoute>} />
           <Route path="/login" element={<PublicRoute><Login /></PublicRoute>} />
-          <Route path="/student-login" element={<Login role="Student" />} />
-          <Route path="/professor-login" element={<Login role="Professor" />} />
+          <Route path="/student-login" element={<PublicRoute><Login role="Student" /></PublicRoute>} />
+          <Route path="/professor-login" element={<PublicRoute><Login role="Professor" /></PublicRoute>} />
           
           <Route element={<ProtectedRoute><AppLayout /></ProtectedRoute>}>
-            <Route index element={<Dashboard />} />
-            <Route path="grade" element={<GradeAssignment />} />
-            <Route path="upload" element={<GradeAssignment step={2} />} />
+            <Route index element={<RoleHome />} />
+            <Route path="grade" element={<ProtectedRoute allowedRoles={["PROFESSOR"]}><GradeAssignment /></ProtectedRoute>} />
+            <Route path="upload" element={<ProtectedRoute allowedRoles={["PROFESSOR"]}><GradeAssignment /></ProtectedRoute>} />
             <Route path="results" element={<Results />} />
-            <Route path="analytics" element={<Analytics />} />
-            <Route path="student" element={<Student />} />
-            <Route path="professor" element={<ProtectedRoute allowedRoles={["Professor"]}><Professor /></ProtectedRoute>} />
+            <Route path="analytics" element={<ProtectedRoute allowedRoles={["PROFESSOR"]}><Analytics /></ProtectedRoute>} />
+            <Route path="student" element={<ProtectedRoute allowedRoles={["STUDENT"]}><Student /></ProtectedRoute>} />
+            <Route path="professor" element={<ProtectedRoute allowedRoles={["PROFESSOR"]}><Professor /></ProtectedRoute>} />
             
             {/* Placeholders for other routes */}
             <Route path="assignments" element={<div className="p-8"><h1 className="text-2xl font-bold mb-4">Assignments</h1><p>Assignment management view coming soon.</p></div>} />
-            <Route path="students" element={<Student />} />
-            <Route path="reports" element={<ReportsView />} />
+            <Route path="students" element={<ProtectedRoute allowedRoles={["PROFESSOR"]}><StudentsView /></ProtectedRoute>} />
+            <Route path="reports" element={<ProtectedRoute allowedRoles={["PROFESSOR"]}><ReportsView /></ProtectedRoute>} />
             <Route path="settings" element={<SettingsView />} />
             <Route path="support" element={<div className="p-8"><h1 className="text-2xl font-bold mb-4">Help & Support</h1><p>Knowledge base coming soon.</p></div>} />
           </Route>
@@ -203,6 +180,11 @@ function App() {
       </Router>
     </AuthProvider>
   );
+}
+
+function RoleHome() {
+  const { user } = useAuth();
+  return <Navigate to={user?.role === "PROFESSOR" ? "/professor" : "/student"} replace />;
 }
 
 export default App;

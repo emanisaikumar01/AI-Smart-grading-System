@@ -1,0 +1,3 @@
+package com.smartgrading.backend.controller;
+import com.smartgrading.backend.dto.UserResponse; import com.smartgrading.backend.exception.ResourceNotFoundException; import com.smartgrading.backend.repository.UserRepository; import org.springframework.security.core.Authentication; import org.springframework.web.bind.annotation.*;
+@RestController @RequestMapping("/api/v1/users") public class UserController { private final UserRepository users; public UserController(UserRepository users){this.users=users;} @GetMapping("/me") public UserResponse me(Authentication auth){return UserResponse.from(users.findByEmail(auth.getName()).orElseThrow(()->new ResourceNotFoundException("User not found")));} }

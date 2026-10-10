@@ -1,81 +1,76 @@
 import { createContext, useContext, useState, useEffect, type ReactNode } from "react";
-
-interface User {
-  id: string;
-  name: string;
-  email: string;
-  role: string;
-  avatar?: string;
-}
+import { api, ApiError, setAuthToken, type Role, type User } from "../lib/api";
 
 interface AuthContextType {
   user: User | null;
   isLoading: boolean;
-  login: (email: string, password: string, role?: string, name?: string) => Promise<void>;
-  updateProfile: (data: Partial<User>) => void;
+  login: (email: string, password: string) => Promise<void>;
+  register: (name: string, email: string, password: string, role: Role) => Promise<void>;
   logout: () => void;
   isAuthenticated: boolean;
 }
 
+const USER_KEY = "smartgrade_user";
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [isLoading, setIsLoading] = useState(true);
 
+  const clearSession = () => {
+    setUser(null);
+    setAuthToken(null);
+    localStorage.removeItem(USER_KEY);
+  };
+
   useEffect(() => {
-    const storedUser = localStorage.getItem("smartgrade_user");
-    if (storedUser) {
+    const storedToken = localStorage.getItem("smartgrade_token");
+    const storedUser = localStorage.getItem(USER_KEY);
+    const onUnauthorized = () => clearSession();
+    window.addEventListener("smartgrade:unauthorized", onUnauthorized);
+    if (!storedToken || !storedUser) {
+      clearSession();
+      setIsLoading(false);
+    } else {
       try {
-        setUser(JSON.parse(storedUser));
+        const parsed = JSON.parse(storedUser) as User;
+        if (typeof parsed.id !== "number" || (parsed.role !== "STUDENT" && parsed.role !== "PROFESSOR")) throw new Error("Stored user data is invalid");
+        setUser(parsed);
+        api.me().then((freshUser) => {
+          setUser(freshUser);
+          localStorage.setItem(USER_KEY, JSON.stringify(freshUser));
+        }).catch((cause) => { if (cause instanceof ApiError && cause.status === 401) clearSession(); }).finally(() => setIsLoading(false));
       } catch {
-        localStorage.removeItem("smartgrade_user");
+        clearSession();
+        setIsLoading(false);
       }
     }
-    setIsLoading(false);
+    return () => window.removeEventListener("smartgrade:unauthorized", onUnauthorized);
   }, []);
 
-  const login = async (email: string, _password: string, role = "Teacher", name?: string) => {
-    setIsLoading(true);
-    await new Promise((resolve) => setTimeout(resolve, 1000));
-    
-    const mockUser: User = {
-      id: "1",
-      name: name ? name : "Demo Teacher",
-      email,
-      role,
-    };
-    
-    setUser(mockUser);
-    localStorage.setItem("smartgrade_user", JSON.stringify(mockUser));
-    setIsLoading(false);
+  const saveAuth = (token: string, authenticatedUser: User) => {
+    setAuthToken(token);
+    localStorage.setItem(USER_KEY, JSON.stringify(authenticatedUser));
+    setUser(authenticatedUser);
   };
 
-  const updateProfile = (data: Partial<User>) => {
-    setUser((prev) => {
-      if (!prev) return prev;
-      const updated = { ...prev, ...data };
-      localStorage.setItem("smartgrade_user", JSON.stringify(updated));
-      return updated;
-    });
+  const login = async (email: string, password: string) => {
+    const result = await api.login({ email, password });
+    saveAuth(result.token, result.user);
   };
 
-  const logout = () => {
-    setUser(null);
-    localStorage.removeItem("smartgrade_user");
+  const register = async (name: string, email: string, password: string, role: Role) => {
+    const result = await api.register({ name, email, password, role });
+    saveAuth(result.token, result.user);
   };
 
-  return (
-    <AuthContext.Provider value={{ user, isLoading, login, updateProfile, logout, isAuthenticated: !!user }}>
-      {children}
-    </AuthContext.Provider>
-  );
+  const logout = () => clearSession();
+
+  return <AuthContext.Provider value={{ user, isLoading, login, register, logout, isAuthenticated: !!user }}>{children}</AuthContext.Provider>;
 }
 
 export function useAuth() {
   const context = useContext(AuthContext);
-  if (context === undefined) {
-    throw new Error("useAuth must be used within an AuthProvider");
-  }
+  if (!context) throw new Error("useAuth must be used within an AuthProvider");
   return context;
 }

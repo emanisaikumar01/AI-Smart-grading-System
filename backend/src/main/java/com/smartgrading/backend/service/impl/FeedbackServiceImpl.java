@@ -1,0 +1,6 @@
+package com.smartgrading.backend.service.impl;
+import com.smartgrading.backend.dto.FeedbackRequest; import com.smartgrading.backend.entity.*; import com.smartgrading.backend.repository.FeedbackRepository; import com.smartgrading.backend.service.FeedbackService; import java.util.List; import org.springframework.stereotype.Service; import org.springframework.transaction.annotation.Transactional;
+@Service public class FeedbackServiceImpl implements FeedbackService { private final FeedbackRepository repo; private final AccessControlService access; public FeedbackServiceImpl(FeedbackRepository r,AccessControlService a){repo=r;access=a;}
+ @Transactional(readOnly=true) public List<Feedback> byAnswer(Integer id){access.readableAnswer(id);return repo.findByAnswerId(id);}
+ @Transactional public Feedback create(Integer id,FeedbackRequest r){StudentAnswer answer=access.answerById(id);access.ownedAssignment(answer.getSubmission().getAssignment().getId());if(r.feedbackType()!=FeedbackType.TEACHER)throw new IllegalArgumentException("Professors may only create TEACHER feedback");Feedback f=new Feedback();f.setAnswer(answer);f.setFeedbackText(r.feedbackText());f.setFeedbackType(FeedbackType.TEACHER);return repo.save(f);}
+}

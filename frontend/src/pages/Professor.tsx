@@ -1,4 +1,4 @@
-import {
+﻿import {
   BarChart3,
   CheckCircle2,
   FileEdit,
@@ -7,26 +7,48 @@ import {
   Sparkles,
   Users,
 } from "lucide-react";
+import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
+import { api, ApiError, type Assignment, type ClassRecord, type Subject } from "../lib/api";
 import { Badge } from "../components/ui/Badge";
 import { Button } from "../components/ui/Button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "../components/ui/Card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "../components/ui/Table";
-
-const professorStats: any[] = [
-  { title: "Active Classes", value: 4, detail: "Undergraduate and postgraduate", bg: "bg-primary/10", icon: Users, color: "text-primary" },
-  { title: "Pending Reviews", value: 6, detail: "Awaiting professor judgment", bg: "bg-yellow-100", icon: MessageSquareWarning, color: "text-yellow-600" },
-  { title: "Avg AI Confidence", value: "78%", detail: "Across recent evaluations", bg: "bg-emerald-100", icon: CheckCircle2, color: "text-emerald-600" },
-  { title: "AI Reviewed", value: 124, detail: "Papers processed this month", bg: "bg-blue-100", icon: Sparkles, color: "text-blue-600" },
-];
-
-const gradingQueue: any[] = [
-  { assignment: "Mechanics - Quiz 2", className: "PHY101", graded: 12, submitted: 30, confidence: "High", status: "Processing" },
-  { assignment: "Organic Chemistry Lab", className: "CHEM201", graded: 0, submitted: 28, confidence: "Low", status: "Review" },
-  { assignment: "Linear Algebra Test", className: "MATH202", graded: 15, submitted: 30, confidence: "Medium", status: "Ready" },
-];
+import { Input } from "../components/ui/Input";
 
 export function Professor() {
+  const [classes, setClasses] = useState<ClassRecord[]>([]);
+  const [subjects, setSubjects] = useState<Subject[]>([]);
+  const [assignments, setAssignments] = useState<Assignment[]>([]);
+  const [submissionCounts, setSubmissionCounts] = useState<Record<number, number>>({});
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+  const [subjectName, setSubjectName] = useState("");
+  const [subjectDescription, setSubjectDescription] = useState("");
+  const [className, setClassName] = useState("");
+  const [section, setSection] = useState("");
+  const [subjectId, setSubjectId] = useState("");
+  const [busy, setBusy] = useState(false);
+  const load = async () => {
+    setLoading(true); setError("");
+    try {
+      const [classRows, subjectRows, assignmentRows] = await Promise.all([api.classes.list(), api.subjects.list(), api.assignments.list()]);
+      setClasses(classRows); setSubjects(subjectRows); setAssignments(assignmentRows);
+      const rows = await Promise.all(assignmentRows.map(async (assignment) => [assignment.id, (await api.assignments.submissions(assignment.id).catch(() => [])).length] as const));
+      setSubmissionCounts(Object.fromEntries(rows));
+      if (!subjectId && subjectRows[0]) setSubjectId(String(subjectRows[0].id));
+    } catch (cause) { setError(cause instanceof ApiError ? cause.message : "Could not load professor data."); }
+    finally { setLoading(false); }
+  };
+  useEffect(() => { void load(); }, []);
+  const createSubject = async () => { setBusy(true); setError(""); try { await api.subjects.create({ name: subjectName.trim(), description: subjectDescription.trim() }); setSubjectName(""); setSubjectDescription(""); await load(); } catch (cause) { setError(cause instanceof ApiError ? cause.message : "Could not create subject."); } finally { setBusy(false); } };
+  const createClass = async () => { setBusy(true); setError(""); try { await api.classes.create({ name: className.trim(), section: section.trim(), subjectId: Number(subjectId) }); setClassName(""); setSection(""); await load(); } catch (cause) { setError(cause instanceof ApiError ? cause.message : "Could not create class."); } finally { setBusy(false); } };
+  const professorStats: any[] = [
+    { title: "Active Classes", value: classes.length, detail: "classes assigned to you", bg: "bg-primary/10", icon: Users, color: "text-primary" },
+    { title: "Pending Reviews", value: assignments.reduce((n, a) => n + (submissionCounts[a.id] ?? 0), 0), detail: "submissions across assignments", bg: "bg-yellow-100", icon: MessageSquareWarning, color: "text-yellow-600" },
+    { title: "Avg AI Confidence", value: "—", detail: "AI evaluation not connected", bg: "bg-emerald-100", icon: CheckCircle2, color: "text-emerald-600" },
+    { title: "Assignments", value: assignments.length, detail: "created assignments", bg: "bg-blue-100", icon: Sparkles, color: "text-blue-600" },
+  ];
   return (
     <div className="space-y-8">
       <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
@@ -38,18 +60,19 @@ export function Professor() {
           <Link to="/grade">
             <Button className="w-full bg-gradient-ai text-white border-0 shadow-glow hover:opacity-90 sm:w-auto">
               <Sparkles className="mr-2 h-5 w-5" />
-              Start AI Grading
+              Create Assignment
             </Button>
           </Link>
-          <Button variant="outline" className="w-full bg-card sm:w-auto">
+          <a href="#class-management"><Button variant="outline" className="w-full bg-card sm:w-auto">
             <Plus className="mr-2 h-5 w-5" />
             New Class
-          </Button>
+          </Button></a>
         </div>
       </div>
 
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-        {professorStats.length === 0 ? (
+        {error && <p role="alert" className="col-span-full rounded-lg border border-destructive/30 bg-destructive/10 p-3 text-sm text-destructive">{error}</p>}
+        {loading ? <Card className="col-span-full"><CardContent className="p-6 text-sm text-muted-foreground">Loading your classes and assignments…</CardContent></Card> : professorStats.length === 0 ? (
           <Card>
             <CardContent className="p-6">
               <p className="text-sm text-muted-foreground">No statistics available yet.</p>
@@ -90,7 +113,7 @@ export function Professor() {
             </Link>
           </CardHeader>
             <CardContent>
-            {gradingQueue.length === 0 ? (
+            {assignments.length === 0 ? (
               <div className="p-6 text-sm text-muted-foreground">No items in grading queue.</div>
             ) : (
             <Table>
@@ -104,28 +127,29 @@ export function Professor() {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {gradingQueue.map((item) => (
-                  <TableRow key={item.assignment}>
-                    <TableCell className="font-medium">{item.assignment}</TableCell>
-                    <TableCell>{item.className}</TableCell>
+                {assignments.map((item) => (
+                  <TableRow key={item.id}>
+                    <TableCell className="font-medium">{item.title}</TableCell>
+                    <TableCell>{classes.find((c) => c.id === item.classId)?.name ?? `Class ${item.classId}`}</TableCell>
                     <TableCell className="text-center text-muted-foreground">
-                      {item.graded} / {item.submitted}
+                      {submissionCounts[item.id] ?? 0}
                     </TableCell>
-                    <TableCell className="text-center font-medium">{item.confidence}</TableCell>
+                    <TableCell className="text-center font-medium">—</TableCell>
                     <TableCell>
                       <Badge
                         variant={
-                          item.status === "Ready"
+                          item.status === "GRADED"
                             ? "success"
-                            : item.status === "Processing"
+                            : item.status === "ACTIVE"
                               ? "warning"
-                              : item.status === "Review"
+                              : item.status === "DRAFT"
                                 ? "destructive"
                                 : "outline"
                         }
                       >
                         {item.status}
                       </Badge>
+                      <Link className="ml-2 text-primary underline" to={`/results?assignmentId=${item.id}`}>Review</Link>
                     </TableCell>
                   </TableRow>
                 ))}
@@ -145,6 +169,14 @@ export function Professor() {
           </CardContent>
         </Card>
       </div>
+
+      <Card id="class-management">
+        <CardHeader><CardTitle>Subjects and Classes</CardTitle><CardDescription>Create subjects and classes that you own.</CardDescription></CardHeader>
+        <CardContent className="grid gap-8 md:grid-cols-2">
+          <div className="space-y-3"><h3 className="font-medium">Create Subject</h3><Input aria-label="Subject name" placeholder="Subject name" value={subjectName} onChange={(e) => setSubjectName(e.target.value)} /><Input aria-label="Subject description" placeholder="Description (optional)" value={subjectDescription} onChange={(e) => setSubjectDescription(e.target.value)} /><Button disabled={busy || !subjectName.trim()} onClick={() => void createSubject()}><Plus className="mr-1 h-4 w-4" />Create Subject</Button><div className="space-y-2">{subjects.map((subject) => <p key={subject.id} className="rounded-lg border p-3 text-sm">{subject.name}</p>)}{subjects.length === 0 && <p className="text-sm text-muted-foreground">No subjects yet.</p>}</div></div>
+          <div className="space-y-3"><h3 className="font-medium">Create Class</h3><Input aria-label="Class name" placeholder="Class name" value={className} onChange={(e) => setClassName(e.target.value)} /><Input aria-label="Section" placeholder="Section (optional)" value={section} onChange={(e) => setSection(e.target.value)} /><select aria-label="Subject" className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm" value={subjectId} onChange={(e) => setSubjectId(e.target.value)}><option value="">Select subject</option>{subjects.map((subject) => <option key={subject.id} value={subject.id}>{subject.name}</option>)}</select><Button disabled={busy || !className.trim() || !subjectId} onClick={() => void createClass()}><Plus className="mr-1 h-4 w-4" />Create Class</Button><div className="space-y-2">{classes.map((item) => <p key={item.id} className="rounded-lg border p-3 text-sm">{item.name}{item.section ? ` · ${item.section}` : ""}</p>)}{classes.length === 0 && <p className="text-sm text-muted-foreground">No classes yet.</p>}</div></div>
+        </CardContent>
+      </Card>
 
       <Card>
         <CardHeader>

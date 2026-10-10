@@ -1,47 +1,77 @@
-import { useState } from "react";
+﻿import { useState } from "react";
 import { ChevronDown, ChevronUp, Edit2, CheckCircle, BrainCircuit, Sparkles, AlertTriangle } from "lucide-react";
+import { useEffect } from "react";
+import { useSearchParams } from "react-router-dom";
+import { api, ApiError, type Evaluation, type Feedback, type Grade } from "../lib/api";
+import { useAuth } from "../context/AuthContext";
 import { Button } from "../components/ui/Button";
 import { Card, CardContent, CardHeader, CardTitle } from "../components/ui/Card";
 import { Badge } from "../components/ui/Badge";
 import { Input } from "../components/ui/Input";
 import { Label } from "../components/ui/Label";
 
-const mockQuestions: any[] = [
-  {
-    id: 1,
-    question: "Explain Newton's second law and give an example.",
-    studentAnswer: "Force equals mass times acceleration. For example, pushing a cart.",
-    aiScore: 8,
-    marks: 10,
-    aiEvaluation: "Good explanation but missing units and a worked numeric example.",
-    aiFeedback: "Add units and a short numeric example showing calculation.",
-    confidence: "High",
-  },
-  {
-    id: 2,
-    question: "Define kinetic energy and show its formula.",
-    studentAnswer: "Kinetic energy is energy of motion, KE = 1/2 mv^2.",
-    aiScore: 9,
-    marks: 10,
-    aiEvaluation: "Accurate and concise. Good use of formula.",
-    aiFeedback: "Consider adding a brief unit analysis for clarity.",
-    confidence: "Medium",
-  },
-  {
-    id: 3,
-    question: "Describe the process of photosynthesis.",
-    studentAnswer: "Plants convert CO2 and water into glucose using sunlight.",
-    aiScore: 7,
-    marks: 10,
-    aiEvaluation: "Covers the basics but lacks mention of oxygen and chlorophyll.",
-    aiFeedback: "Mention oxygen release and the role of chlorophyll next time.",
-    confidence: "Low",
-  },
-];
-
 export function Results() {
+  const { user } = useAuth();
+  const [params] = useSearchParams();
+  const [resultQuestions, setQuestions] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+  const [submissionInfo, setSubmissionInfo] = useState("");
+  const [editingScore, setEditingScore] = useState("");
+  const [editingFeedback, setEditingFeedback] = useState("");
   const [expandedQ, setExpandedQ] = useState<number | null>(null);
   const [editingQ, setEditingQ] = useState<number | null>(null);
+  const [submissionId, setSubmissionId] = useState<number | null>(null);
+  const [evaluating, setEvaluating] = useState(false);
+  const [refreshCount, setRefreshCount] = useState(0);
+
+  useEffect(() => {
+    if (!user) return;
+    let cancelled = false;
+    const load = async () => {
+      setLoading(true); setError("");
+      try {
+        const targetId = Number(params.get("submissionId"));
+        const assignmentId = Number(params.get("assignmentId"));
+        let submission = targetId ? await api.submissions.get(targetId) : null;
+        if (!submission && assignmentId && user.role === "PROFESSOR") submission = (await api.assignments.submissions(assignmentId))[0] ?? null;
+        if (!submission && user.role === "STUDENT") submission = (await api.submissions.student(user.id))[0] ?? null;
+        if (!submission) { setQuestions([]); setSubmissionId(null); return; }
+        setSubmissionId(submission.id);
+        const [answers, questions] = await Promise.all([api.submissions.answers(submission.id), api.assignments.questions(submission.assignmentId)]);
+        const rows = await Promise.all(answers.map(async (answer) => {
+          const [grades, evaluations, feedback] = await Promise.all([
+            api.answers.grades(answer.id).catch(() => [] as Grade[]),
+            api.answers.evaluation(answer.id).catch(() => [] as Evaluation[]),
+            api.answers.feedback(answer.id).catch(() => [] as Feedback[]),
+          ]);
+          const grade = grades[0]; const evaluation = evaluations[0];
+          const question = questions.find((item) => item.id === answer.questionId);
+          return { id: answer.id, questionNumber: question?.questionNumber, question: question?.questionText ?? `Question ${answer.questionId}`, studentAnswer: answer.answerText ?? "No answer text", aiScore: evaluation?.aiScore ?? grade?.aiScore ?? null, finalScore: grade?.finalScore ?? null, marks: question?.maxMarks ?? "—", aiEvaluation: evaluation?.evaluation ?? "Not evaluated yet.", aiFeedback: feedback[0]?.feedbackText ?? evaluation?.feedback ?? "The AI service did not return feedback.", confidence: evaluation?.confidenceScore ? `${Math.round(evaluation.confidenceScore * 100)}%` : "—", grade };
+        }));
+        if (!cancelled) { setQuestions(rows); setSubmissionInfo(`Submission ${submission.id} · Student ${submission.studentId} · ${submission.status}`); }
+      } catch (cause) { if (!cancelled) setError(cause instanceof ApiError ? cause.message : "Could not load results."); }
+      finally { if (!cancelled) setLoading(false); }
+    };
+    void load(); return () => { cancelled = true; };
+  }, [user, params, refreshCount]);
+
+  const evaluateSubmission = async () => {
+    if (!submissionId) return;
+    setEvaluating(true); setError("");
+    try { await api.submissions.evaluate(submissionId); setRefreshCount((count) => count + 1); }
+    catch (cause) { setError(cause instanceof ApiError ? cause.message : "AI evaluation failed. No score was generated."); }
+    finally { setEvaluating(false); }
+  };
+
+  const saveOverride = async (q: any) => {
+    setError("");
+    try {
+      const updated = await api.answers.updateGrade(q.id, { teacherScore: Number(editingScore), finalScore: Number(editingScore), teacherFeedback: editingFeedback, isOverridden: true });
+      setQuestions((rows) => rows.map((row) => row.id === q.id ? { ...row, finalScore: updated.finalScore, grade: updated } : row));
+      setEditingQ(null);
+    } catch (cause) { setError(cause instanceof ApiError ? cause.message : "Could not save grade override."); }
+  };
 
   const toggleExpand = (id: number) => {
     setExpandedQ(expandedQ === id ? null : id);
@@ -52,11 +82,10 @@ export function Results() {
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
           <h1 className="text-3xl font-bold tracking-tight">Grading Results</h1>
-          <p className="text-muted-foreground mt-1">Review AI evaluation and make manual adjustments.</p>
+          <p className="text-muted-foreground mt-1">Review stored evaluation and make manual adjustments.</p>
         </div>
         <div className="flex gap-3">
-          <Button variant="outline">Previous Student</Button>
-          <Button>Next Student <ChevronDown className="w-4 h-4 ml-2 -rotate-90" /></Button>
+          {user?.role === "PROFESSOR" && <Button onClick={() => void evaluateSubmission()} disabled={!submissionId || evaluating || loading}>{evaluating ? "Evaluating…" : "Evaluate submission"}</Button>}
         </div>
       </div>
 
@@ -66,7 +95,7 @@ export function Results() {
             <CardTitle>Student Profile</CardTitle>
           </CardHeader>
           <CardContent className="space-y-6">
-            <p className="text-sm text-muted-foreground">No student selected.</p>
+            <p className="text-sm text-muted-foreground">{loading ? "Loading…" : submissionInfo || "No submission selected."}</p>
           </CardContent>
         </Card>
 
@@ -79,7 +108,7 @@ export function Results() {
               <div>
                 <h4 className="font-semibold text-primary">AI Overall Insight</h4>
                 <p className="text-sm mt-1 text-slate-200">
-                  James demonstrates a strong grasp of theoretical concepts but struggles with numerical applications and unit conversions. Recommend focusing on practical problem-solving in the next session.
+                  {resultQuestions.some((question) => question.aiScore != null) ? "Stored AI scores and evaluation diagnostics are shown below." : "No AI scores are stored for this submission yet."}
                 </p>
               </div>
             </CardContent>
@@ -87,25 +116,26 @@ export function Results() {
 
           <h3 className="font-semibold text-lg mt-6 mb-2">Question-by-Question Evaluation</h3>
           
-          {mockQuestions.length === 0 ? (
+          {error && <p role="alert" className="rounded-lg bg-destructive/10 p-3 text-sm text-destructive">{error}</p>}
+          {loading ? <div className="p-6 text-sm text-muted-foreground">Loading results…</div> : resultQuestions.length === 0 ? (
             <div className="p-6 text-sm text-muted-foreground">No grading results to review.</div>
           ) : (
             <>
-              {mockQuestions.map((q) => (
+              {resultQuestions.map((q) => (
                 <Card key={q.id} className="overflow-hidden transition-all duration-200 shadow-sm hover:shadow-md">
                   <div
                     className="p-4 border-b border-primary/10 flex items-center justify-between cursor-pointer bg-[#1f2937]/45 hover:bg-primary/10"
                     onClick={() => toggleExpand(q.id)}
                   >
                     <div className="flex items-center gap-4">
-                      <div className="w-8 h-8 rounded bg-muted flex items-center justify-center font-bold text-sm">Q{q.id}</div>
+                      <div className="w-8 h-8 rounded bg-muted flex items-center justify-center font-bold text-sm">Q{q.questionNumber ?? q.id}</div>
                       <div>
                         <h4 className="font-medium line-clamp-1">{q.question}</h4>
                       </div>
                     </div>
                     <div className="flex items-center gap-4">
                       <div className="text-right">
-                        <span className="font-bold text-primary">{q.aiScore}</span>
+                  <span className="font-bold text-primary">{q.finalScore ?? q.aiScore ?? "—"}</span>
                         <span className="text-muted-foreground text-sm"> / {q.marks}</span>
                       </div>
                       {expandedQ === q.id ? <ChevronUp className="w-5 h-5 text-muted-foreground" /> : <ChevronDown className="w-5 h-5 text-muted-foreground" />}
@@ -138,7 +168,7 @@ export function Results() {
                               <CheckCircle className="w-4 h-4 text-emerald-500" /> Scoring
                             </h4>
                             {!editingQ || editingQ !== q.id ? (
-                              <Button variant="ghost" size="sm" onClick={() => setEditingQ(q.id)}>
+                              <Button variant="ghost" size="sm" onClick={() => { setEditingScore(q.aiScore == null ? "" : String(q.aiScore)); setEditingFeedback(q.aiFeedback === "No stored feedback." ? "" : q.aiFeedback); setEditingQ(q.id); }}>
                                 <Edit2 className="w-3 h-3 mr-2" /> Override
                               </Button>
                             ) : null}
@@ -149,24 +179,26 @@ export function Results() {
                               <div className="space-y-2">
                                 <Label>Teacher Score</Label>
                                 <div className="flex items-center gap-2">
-                                  <Input type="number" defaultValue={q.aiScore} className="w-20" />
+                                  <Input type="number" min="0" max={q.marks === "—" ? undefined : q.marks} step="0.01" value={editingScore} onChange={(e) => setEditingScore(e.target.value)} className="w-20" />
                                   <span className="text-muted-foreground">/ {q.marks}</span>
                                 </div>
                               </div>
                               <div className="space-y-2">
                                 <Label>Teacher Feedback</Label>
-                                <textarea className="w-full min-h-[80px] rounded-md border border-input bg-background px-3 py-2 text-sm" defaultValue={q.aiFeedback} />
+                              <textarea className="w-full min-h-[80px] rounded-md border border-input bg-background px-3 py-2 text-sm" value={editingFeedback} onChange={(e) => setEditingFeedback(e.target.value)} />
                               </div>
                               <div className="flex justify-end gap-2 mt-auto">
                                 <Button variant="outline" size="sm" onClick={() => setEditingQ(null)}>Cancel</Button>
-                                <Button size="sm" onClick={() => setEditingQ(null)}>Save Changes</Button>
+                                <Button size="sm" disabled={!editingScore} onClick={() => void saveOverride(q)}>Save Changes</Button>
                               </div>
                             </div>
                           ) : (
                             <div className="space-y-4 flex-1 flex flex-col justify-center items-center text-center">
                               <div>
-                                <span className="text-5xl font-bold text-primary">{q.aiScore}</span>
+                                <span className="text-xs text-muted-foreground block">AI score</span>
+                                <span className="text-5xl font-bold text-primary">{q.aiScore ?? "—"}</span>
                                 <span className="text-xl text-muted-foreground">/{q.marks}</span>
+                                {q.finalScore != null && q.finalScore !== q.aiScore && <p className="mt-2 text-sm">Final score: {q.finalScore}/{q.marks}</p>}
                               </div>
 
                               {q.confidence === "Medium" && (
@@ -174,7 +206,7 @@ export function Results() {
                                   <AlertTriangle className="w-3 h-3 mr-1" /> Medium Confidence
                                 </Badge>
                               )}
-                              <p className="text-xs text-muted-foreground mt-4">Score calculated automatically. Click override to change.</p>
+                              <p className="text-xs text-muted-foreground mt-4">{q.grade?.overridden ? "Teacher override saved." : q.aiScore == null ? "No score is stored." : "Stored score. Click override to change."}</p>
                             </div>
                           )}
                         </div>
