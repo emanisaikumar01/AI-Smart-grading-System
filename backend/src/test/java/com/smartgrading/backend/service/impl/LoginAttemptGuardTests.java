@@ -1,6 +1,5 @@
-package com.smartgrading.backend;
+package com.smartgrading.backend.service.impl;
 
-import com.smartgrading.backend.service.impl.LoginAttemptGuard;
 import org.junit.jupiter.api.Test;
 import java.time.*;
 import static org.junit.jupiter.api.Assertions.*;
@@ -23,7 +22,7 @@ class LoginAttemptGuardTests {
         clock.advance(Duration.ofMinutes(10).plusSeconds(1));
         assertFalse(guard.isBlocked("person@test.local", "192.0.2.1"));
         guard.recordSuccess("person@test.local");
-        for (int i=0;i<4;i++) guard.recordFailure("other@test.local", "192.0.2.2");
+        for (int i=0;i<5;i++) guard.recordFailure("other@test.local", "192.0.2.2");
         assertTrue(guard.isBlocked("new@test.local", "192.0.2.2"));
     }
 

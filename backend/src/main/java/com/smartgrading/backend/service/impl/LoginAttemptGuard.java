@@ -26,6 +26,7 @@ public class LoginAttemptGuard {
     private final Duration cooldown;
     private final Clock clock;
 
+    @org.springframework.beans.factory.annotation.Autowired
     public LoginAttemptGuard(@Value("${app.security.login.threshold:5}") int threshold,
                              @Value("${app.security.login.window:10m}") Duration window,
                              @Value("${app.security.login.cooldown:15m}") Duration cooldown) {
