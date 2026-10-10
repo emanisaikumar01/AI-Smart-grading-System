@@ -41,6 +41,19 @@ class BackendWorkflowTests {
  private AssignmentResponse createActive(){login(professor);AssignmentResponse a=assignmentService.create(new AssignmentRequest(classroom.getId(),"Exam",null,null,new BigDecimal("20.00"),null));return assignmentService.publish(a.id());}
 
  @Test void registerAndLoginUseHashedPasswords(){AuthResponse registered=userService.register(new RegisterRequest("New Person","new@test.local","strong-password",Role.STUDENT));assertNotNull(registered.token());User persisted=users.findByEmail("new@test.local").orElseThrow();assertNotEquals("strong-password",persisted.getPassword());assertTrue(encoder.matches("strong-password",persisted.getPassword()));assertNotNull(userService.login(new LoginRequest("new@test.local","strong-password")).token());}
+ @Test void loginFailuresAreGenericAndSuccessfulLoginResetsAccountWindow(){
+  userService.register(new RegisterRequest("Login Test","login-test@test.local","strong-password",Role.STUDENT));
+  InvalidCredentialsException wrong=assertThrows(InvalidCredentialsException.class,()->userService.login(new LoginRequest("login-test@test.local","wrong-password"),"203.0.113.40"));
+  InvalidCredentialsException missing=assertThrows(InvalidCredentialsException.class,()->userService.login(new LoginRequest("missing@test.local","wrong-password"),"203.0.113.41"));
+  assertEquals(wrong.getMessage(),missing.getMessage());
+  for(int i=1;i<4;i++)assertThrows(InvalidCredentialsException.class,()->userService.login(new LoginRequest("login-test@test.local","wrong-password"),"203.0.113.42"));
+  assertNotNull(userService.login(new LoginRequest("login-test@test.local","strong-password"),"203.0.113.43").token());
+  for(int i=0;i<4;i++)assertThrows(InvalidCredentialsException.class,()->userService.login(new LoginRequest("login-test@test.local","wrong-password"),"203.0.113.45"));
+  assertNotNull(userService.login(new LoginRequest("login-test@test.local","strong-password"),"203.0.113.46").token());
+  assertThrows(InvalidCredentialsException.class,()->userService.login(new LoginRequest("login-test@test.local","wrong-password"),"203.0.113.47"));
+  for(int i=0;i<4;i++)assertThrows(InvalidCredentialsException.class,()->userService.login(new LoginRequest("login-test@test.local","wrong-password"),"203.0.113.48"));
+  assertThrows(InvalidCredentialsException.class,()->userService.login(new LoginRequest("login-test@test.local","strong-password"),"203.0.113.49"));
+ }
  @Test void professorCanAddAndRemoveStudentMembership(){login(professor);classService.addStudent(classroom.getId(),student.getId());assertEquals(1,classService.students(classroom.getId()).size());classService.removeStudent(classroom.getId(),student.getId());assertTrue(classService.students(classroom.getId()).isEmpty());}
  @Test void duplicateMembershipIsRejected(){login(professor);classService.addStudent(classroom.getId(),student.getId());assertThrows(UserAlreadyExistsException.class,()->classService.addStudent(classroom.getId(),student.getId()));}
  @Test void professorCannotModifyAnotherProfessorsClass(){login(otherProfessor);assertThrows(AccessDeniedException.class,()->classService.update(classroom.getId(),new ClassRequest("Changed","B",subject.getId())));}
