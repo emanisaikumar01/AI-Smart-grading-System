@@ -10,6 +10,7 @@ import { Landing } from "./pages/Landing";
 import { Login } from "./pages/Login";
 import { Student } from "./pages/Student";
 import { Professor } from "./pages/Professor";
+import { SystemFlow } from "./pages/SystemFlow";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "./components/ui/Card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "./components/ui/Table";
 import { Button } from "./components/ui/Button";
@@ -189,6 +190,7 @@ function App() {
             <Route path="upload" element={<GradeAssignment step={2} />} />
             <Route path="results" element={<Results />} />
             <Route path="analytics" element={<Analytics />} />
+            <Route path="workflow" element={<SystemFlow />} />
             <Route path="student" element={<Student />} />
             <Route path="professor" element={<ProtectedRoute allowedRoles={["Professor"]}><Professor /></ProtectedRoute>} />
             

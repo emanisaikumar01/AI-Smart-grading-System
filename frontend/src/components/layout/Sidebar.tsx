@@ -35,6 +35,7 @@ const navItems = [
   { name: "Students", href: "/students", icon: Users },
   { name: "Results", href: "/results", icon: Award },
   { name: "Analytics", href: "/analytics", icon: BarChart3 },
+  { name: "Workflow Map", href: "/workflow", icon: BrainCircuit },
   { name: "Reports", href: "/reports", icon: FileText },
   { name: "Settings", href: "/settings", icon: Settings },
 ];
