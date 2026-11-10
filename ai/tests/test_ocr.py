@@ -1,33 +1,43 @@
+
+from pathlib import Path
+
+import pytest
+import torch
 from PIL import Image
 from transformers import TrOCRProcessor, VisionEncoderDecoderModel
-import torch
 
 MODEL_NAME = "microsoft/trocr-base-handwritten"
 
-print("Loading TrOCR model...")
 
-processor = TrOCRProcessor.from_pretrained(MODEL_NAME)
-model = VisionEncoderDecoderModel.from_pretrained(MODEL_NAME)
+@pytest.mark.integration
+def test_ocr_recognition():
+    image_path = (
+        Path(__file__).resolve().parents[1]
+        / "data"
+        / "test_images"
+        / "handwriting.png"
+    )
 
-print("Model loaded successfully!")
+    assert image_path.is_file(), f"Image not found: {image_path}"
 
-image_path = "../data/test_images/handwriting.png"
+    processor = TrOCRProcessor.from_pretrained(MODEL_NAME)
+    model = VisionEncoderDecoderModel.from_pretrained(MODEL_NAME)
 
-image = Image.open(image_path).convert("RGB")
+    image = Image.open(image_path).convert("RGB")
 
-pixel_values = processor(
-    images=image,
-    return_tensors="pt"
-).pixel_values
+    pixel_values = processor(
+        images=image,
+        return_tensors="pt"
+    ).pixel_values
 
-with torch.no_grad():
-    generated_ids = model.generate(pixel_values)
+    with torch.no_grad():
+        generated_ids = model.generate(pixel_values)
 
-text = processor.batch_decode(
-    generated_ids,
-    skip_special_tokens=True
-)[0]
+    recognized_text = processor.batch_decode(
+        generated_ids,
+        skip_special_tokens=True
+    )[0]
 
-print("\nRecognized Text:")
-print("----------------")
-print(text)
+    print("Recognized text:", recognized_text)
+    assert isinstance(recognized_text, str)
+    assert len(recognized_text.strip()) > 0

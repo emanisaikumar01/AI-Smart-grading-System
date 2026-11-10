@@ -50,6 +50,32 @@ class GradingApiTests(unittest.TestCase):
         self.assertEqual(response.status_code, 500)
         self.assertEqual(response.json(), {"detail": "AI grading failed"})
 
+    @patch("ai.api.evaluate_rubric", return_value={
+        "marks_awarded": 1.0, "max_marks": 1.0, "review_required": True,
+        "criterion_assessments": [], "criteria": [],
+    })
+    def test_additive_rubric_endpoint_returns_structured_result(self, evaluate):
+        response = self.client.post("/ai/grade/rubric", json={
+            "studentAnswer": "Plants use sunlight.",
+            "rubricCriteria": [{
+                "name": "sunlight", "description": "Sunlight provides energy.",
+                "marks": 1, "keywords": ["sunlight"], "synonyms": [],
+            }],
+            "maxMarks": 1,
+        })
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()["marks_awarded"], 1.0)
+        self.assertTrue(response.json()["review_required"])
+        evaluate.assert_called_once()
+
+    def test_rubric_endpoint_rejects_unallocated_marks_by_default(self):
+        response = self.client.post("/ai/grade/rubric", json={
+            "studentAnswer": "Plants use sunlight.",
+            "rubricCriteria": [{"name": "sunlight", "marks": 1}],
+            "maxMarks": 2,
+        })
+        self.assertEqual(response.status_code, 422)
+
 
 if __name__ == "__main__":
     unittest.main()
